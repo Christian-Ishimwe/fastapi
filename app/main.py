@@ -1,8 +1,11 @@
 from typing import Optional
 from fastapi import FastAPI, Response, status, HTTPException
 from fastapi.params import Body
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
 from random import randrange
+import time
 
 app =FastAPI()
 
@@ -33,6 +36,22 @@ class Post(BaseModel):
 class Update(BaseModel):
     title: str
     content: str
+    published: bool  = True
+    
+    
+while True:
+    try:
+        cunn=psycopg2.connect(host='localhost', password='christian', user='postgres',database='fastapi', cursor_factory=RealDictCursor)
+        cursor=cunn.cursor()
+        print('successful connected')
+        break
+    except Exception as error:
+        
+        print('failed to auntantivate')
+        print('error is', error)
+        time.sleep(2)
+        
+
 
 @app.get("/")
 def get_user():
@@ -40,14 +59,25 @@ def get_user():
 
 @app.get('/posts')
 def get_posts():
-    return {"data": myposts}
+    cursor.execute("""
+                       SELECT * FROM posts
+                       ORDER BY id DESC
+                       """)
+    data=cursor.fetchall()
+    print()
+    return {"data": data}
 
-@app.post('/posts', status_code=status.HTTP_201_CREATED)
+@app.post('/posts', status_code=status.HTTP_201_CREATED) 
 def create_post(post : Post):
-    post_dict=post.dict()
-    post_dict['id']=randrange(1,100000)
-    myposts.append(post_dict)
-    return {'data': myposts}
+    
+    cursor.execute("""
+                   INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *
+                   """,
+                    (post.title, post.content, post.published)
+                   )
+    new_entry=cursor.fetchone()
+    return {"New post": new_entry}
+
 
 @app.get('/post/{id}')
 def get_post(id: int, response: Response):
